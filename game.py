@@ -60,10 +60,11 @@ class Player(pygame.sprite.Sprite):
         self.frames = []
         self.cut_sheet(player_image['stay'], 1, 1)
         self.cur_frame = 0
+        self.k = 0
         self.stay = False
         self.jump = False
         self.die = False
-        self.force = 10
+        self.force = 12
         self.image = self.frames[self.cur_frame]
         self.rect = self.rect.move(tile_width * pos_x + 15, tile_height * pos_y + 5)
 
@@ -85,9 +86,6 @@ class Player(pygame.sprite.Sprite):
             elif j.tile_type == 'sprikes':
                 self.die = True
         if len(pygame.sprite.spritecollide(self, tiles_group, False)) == 0:
-            self.stay = False
-
-        if self.stay is False:
             coords[1] += GRAVITY
             self.rect.y += GRAVITY
 
@@ -116,7 +114,7 @@ class Player(pygame.sprite.Sprite):
                 self.force -= 1
             else:
                 self.jump = False
-                self.force = 10
+                self.force = 12
 
         if motion == 'left':
             coords[0] -= 5
@@ -128,8 +126,14 @@ class Player(pygame.sprite.Sprite):
         self.image = self.frames[self.cur_frame]
 
         if self.die is True:
+            self.k += 1
             self.frames = []
             self.cut_sheet(player_image['die'], 5, 1)
+
+        if self.k > 0:
+            self.k += 1
+        if self.k == 6:
+            exit()
 
 
 class Tile(pygame.sprite.Sprite):
