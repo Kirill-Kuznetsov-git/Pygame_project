@@ -1,13 +1,15 @@
 import pygame
 import os
+import random
 
 
-width = 600
-height = 510
-fps = 15
+width = 700
+height = 610
+fps = 20
 GRAVITY = 15
 coords = [300, 300]
 motion = 'stop'
+en_motion = 'left'
 clock = pygame.time.Clock()
 screen = pygame.display.set_mode((width, height))
 screen_rect = (0, 0, width, height)
@@ -35,13 +37,20 @@ def load_level(filename):
 
 tile_images = {'ground': load_image('ground0.png', -1),
                'sprikes': load_image('sprikes.png', -1),
-               'star': load_image('star.png', -1),
+               'key': load_image('key.png', -1),
                'gun_l': load_image('gun_l.png', -1),
                'gun_r': load_image('gun_r.png', -1),
-               'lava': load_image('lava.png', -1)}
+               'lava': load_image('lava.png', -1),
+               'en_gun_l': load_image('en_gun_l.png', -1),
+               'en_gun_r': load_image('en_gun_r.png', -1),
+               'door': load_image('door.png', -1)
+               }
 player_image = {'run_r': load_image('run_r.png', -1), 'run_l': load_image('run_l.png', -1),
                 'shoot_l': load_image('shoot_l.png', -1), 'shoot_r': load_image('shoot_r.png', -1),
                 'die': load_image('die.png', -1), 'stay': load_image('stay.png', -1)}
+enemy_image = {'en_shoot_l': load_image('en_shoot_l.png', -1), 'en_shoot_r': load_image('en_shoot_r.png', -1),
+               'en_die_l': load_image('en_die_l.png', -1), 'en_die_r': load_image('en_die_r.png', -1),
+               'en_stay_r': load_image('en_stay_r.png', -1), 'en_stay_l': load_image('en_stay_l.png', -1)}
 tile_width = 30
 tile_height = 30
 player = None
@@ -51,7 +60,9 @@ all_sprites = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
 player_group = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
+bullets_en = pygame.sprite.Group()
 lava = pygame.sprite.Group()
+enemy = pygame.sprite.Group()
 
 
 class Player(pygame.sprite.Sprite):
@@ -67,7 +78,7 @@ class Player(pygame.sprite.Sprite):
         self.stay = False
         self.jump = False
         self.die = False
-        self.force = 11
+        self.force = 12
         self.image = self.frames[self.cur_frame]
         self.rect = self.rect.move(tile_width * pos_x + 15, tile_height * pos_y + 5)
         self.rect.x = coords[0]
@@ -86,8 +97,11 @@ class Player(pygame.sprite.Sprite):
         for j in pygame.sprite.spritecollide(self, tiles_group, False):
             if j.tile_type == 'sprikes':
                 self.die = True
-            elif j.tile_type == 'lava':
-                self.die = True
+        if len(pygame.sprite.spritecollide(self, lava, False)) != 0:
+            self.die = True
+        if len(pygame.sprite.spritecollide(self, bullets_en, False)) != 0:
+            self.die = True
+
         for _ in range(15):
             if len(pygame.sprite.spritecollide(self, tiles_group, False)) == 0:
                 self.stay = False
@@ -138,14 +152,24 @@ class Player(pygame.sprite.Sprite):
                         break
             else:
                 self.jump = False
-                self.force = 11
+                self.force = 12
 
-        if motion == 'left':
+        if motion == 'left' and coords[0] < width:
             coords[0] -= 6
             self.rect.x -= 6
-        elif motion == 'right':
+            for j in pygame.sprite.spritecollide(self, tiles_group, False):
+                if j.tile_type == 'ground':
+                    if j.rect.x < coords[0] and j.rect.y - coords[1] < 25:
+                        coords[0] += 6
+                        self.rect.x += 6
+        elif motion == 'right' and coords[0] < width - 30:
             coords[0] += 6
             self.rect.x += 6
+            for j in pygame.sprite.spritecollide(self, tiles_group, False):
+                if j.tile_type == 'ground':
+                    if j.rect.x > coords[0] and j.rect.y - coords[1] < 25:
+                        coords[0] -= 6
+                        self.rect.x -= 6
 
         self.cur_frame = (self.cur_frame + 1) % len(self.frames)
         self.image = self.frames[self.cur_frame]
@@ -186,10 +210,26 @@ class Tile(pygame.sprite.Sprite):
 
 class Lava(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
-        super().__init__(lava, all_sprites)
-        self.image = tile_images[tile_type]
-        self.tile_type = tile_type
-        self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
+        super().__init__(lava)
+        self.frames = []
+        self.coords = [tile_width * pos_x, tile_height * pos_y]
+        self.cut_sheet(tile_images[tile_type], 7, 2)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.image.get_rect().move(tile_width * pos_x - 10, tile_height * pos_y - 10)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(self.coords[0] - 10, self.coords[1] - 10, sheet.get_width() // columns,
+                                sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(
+                    frame_location, self.rect.size)))
+
+    def update(self):
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -201,9 +241,118 @@ class Bullet(pygame.sprite.Sprite):
 
     def update(self):
         if self.tile_type == 'gun_r':
-            self.rect.x += 50
+            self.rect.x += 20
         elif self.tile_type == 'gun_l':
-            self.rect.x -= 50
+            self.rect.x -= 20
+
+        if self.rect.x >= width:
+            self.kill()
+
+
+class Bullet_en(pygame.sprite.Sprite):
+    def __init__(self, tile_type, pos_x, pos_y):
+        super().__init__(bullets_en)
+        self.image = tile_images[tile_type]
+        self.tile_type = tile_type
+        self.rect = self.image.get_rect().move(pos_x, pos_y)
+
+    def update(self):
+        if self.tile_type == 'en_gun_r':
+            self.rect.x += 20
+        elif self.tile_type == 'en_gun_l':
+            self.rect.x -= 20
+
+
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(enemy)
+        self.frames = []
+        self.coords = [tile_width * pos_x + 15, tile_height * pos_y + 5]
+        if random.choice([1, 2]) == 1:
+            self.cut_sheet(enemy_image['en_stay_l'], 1, 1)
+            self.motion = 'left'
+        else:
+            self.cut_sheet(enemy_image['en_stay_r'], 1, 1)
+            self.motion = 'right'
+        self.cur_frame = 0
+        self.k = 0
+        self.h = 0
+        self.time = 0
+        self.time_s = 0
+        self.shoot = False
+        self.die = False
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(tile_width * pos_x + 15, tile_height * pos_y + 5)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(self.coords[0], self.coords[1], sheet.get_width() // columns,
+                                sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(
+                    frame_location, self.rect.size)))
+
+    def update(self):
+        if len(pygame.sprite.spritecollide(self, bullets, False)) != 0:
+            self.die = True
+            bullets.empty()
+        elif len(pygame.sprite.spritecollide(self, lava, False)) != 0:
+            self.die = True
+            bullets.empty()
+        self.rect.x -= 3
+        self.coords[0] -= 3
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
+        if self.shoot is True:
+            self.h += 1
+        if self.h == 5:
+            self.h = 0
+            self.shoot = False
+            if self.motion == 'left':
+                self.frames = []
+                self.cut_sheet(enemy_image['en_stay_l'], 1, 1)
+            elif self.motion == 'right':
+                self.frames = []
+                self.cut_sheet(enemy_image['en_stay_r'], 1, 1)
+
+        if (pygame.time.get_ticks() // 1000 - self.time) >= 5:
+            self.time = pygame.time.get_ticks() // 1000
+            if self.motion == 'left':
+                self.motion = 'right'
+                self.frames = []
+                self.cut_sheet(enemy_image['en_stay_r'], 1, 1)
+            else:
+                self.motion = 'left'
+                self.frames = []
+                self.cut_sheet(enemy_image['en_stay_l'], 1, 1)
+
+        if self.motion == 'left' and self.h == 0 and (pygame.time.get_ticks() // 1000 - self.time_s) >= 2:
+            if self.coords[0] - 300 < coords[0] < self.coords[0] and self.coords[1] - 5 < coords[1] < self.coords[1] + 5:
+                self.time_s = pygame.time.get_ticks() // 1000
+                self.frames = []
+                self.cut_sheet(enemy_image['en_shoot_l'], 5, 1)
+                Bullet_en('en_gun_l', self.coords[0] - 5, self.coords[1])
+                self.shoot = True
+        elif self.motion == 'right' and self.h == 0 and (pygame.time.get_ticks() // 1000 - self.time_s) >= 2:
+            if self.coords[0] < coords[0] < self.coords[0] + 300 and self.coords[1] - 5 < coords[1] < self.coords[1] + 5:
+                self.time_s = pygame.time.get_ticks() // 1000
+                self.frames = []
+                self.cut_sheet(enemy_image['en_shoot_r'], 5, 1)
+                Bullet_en('en_gun_r', self.coords[0] + 5, self.coords[1])
+                self.shoot = True
+
+        if self.die is True:
+            self.k += 1
+            self.frames = []
+            if self.motion == 'right':
+                self.cut_sheet(enemy_image['en_die_r'], 5, 1)
+            elif self.motion == 'left':
+                self.cut_sheet(enemy_image['en_die_l'], 5, 1)
+        if self.k > 0:
+            self.k += 1
+        if self.k == 6:
+            self.kill()
 
 
 def generate_level(level):
@@ -219,8 +368,12 @@ def generate_level(level):
                 Tile('sprikes', x, y)
             elif level[y][x] == '%':
                 Lava('lava', x, y)
+            elif level[y][x] == '&':
+                Enemy(x, y)
             elif level[y][x] == '!':
-                Tile('star', x, y)
+                Tile('key', x, y)
+            elif level[y][x] == '?':
+                Tile('door', x, y)
             elif level[y][x] == '$':
                 coords = [x * 30, 390]
                 new_player = Player(x, y)
@@ -255,15 +408,20 @@ while running:
         player_group.update(False)
     for sprite in all_sprites:
         if sprite.tile_type != 'lava':
-            sprite.rect.x -= 2
+            sprite.rect.x -= 3
     for sprite in player_group:
-        sprite.rect.x -= 2
-        coords[0] -= 2
+        sprite.rect.x -= 3
+        coords[0] -= 3
+    bullets_en.update()
+    bullets.update()
+    enemy.update()
+    lava.update()
     screen.blit(fon, (0, 0))
     all_sprites.draw(screen)
+    enemy.draw(screen)
     bullets.draw(screen)
+    bullets_en.draw(screen)
     lava.draw(screen)
-    bullets.update()
     player_group.draw(screen)
     clock.tick(fps)
     pygame.display.flip()
