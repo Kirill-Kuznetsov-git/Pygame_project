@@ -1,18 +1,11 @@
 import pygame
 import os
 import random
+import menu_start
+import menu_middle
 
 
-width = 700
-height = 610
-fps = 20
-GRAVITY = 15
-coords = [300, 300]
-motion = 'stop'
-en_motion = 'left'
-clock = pygame.time.Clock()
-screen = pygame.display.set_mode((width, height))
-screen_rect = (0, 0, width, height)
+# загрузка изображений
 
 
 def load_image(name, colorkey=None):
@@ -26,6 +19,8 @@ def load_image(name, colorkey=None):
         image = image.convert_alpha()
     return image
 
+# загрузка уровния с txt файла
+
 
 def load_level(filename):
     filename = filename
@@ -34,35 +29,18 @@ def load_level(filename):
     max_width = max(map(len, level_map))
     return list(map(lambda x: x.ljust(max_width, '.'), level_map))
 
+# переменные которые не изменяются
+width = 700
+height = 610
+fps = 20
+GRAVITY = 15
 
-tile_images = {'ground': load_image('ground0.png', -1),
-               'sprikes': load_image('sprikes.png', -1),
-               'key': load_image('key.png', -1),
-               'gun_l': load_image('gun_l.png', -1),
-               'gun_r': load_image('gun_r.png', -1),
-               'lava': load_image('lava.png', -1),
-               'en_gun_l': load_image('en_gun_l.png', -1),
-               'en_gun_r': load_image('en_gun_r.png', -1),
-               'door': load_image('door.png', -1)
-               }
-player_image = {'run_r': load_image('run_r.png', -1), 'run_l': load_image('run_l.png', -1),
-                'shoot_l': load_image('shoot_l.png', -1), 'shoot_r': load_image('shoot_r.png', -1),
-                'die': load_image('die.png', -1), 'stay': load_image('stay.png', -1)}
-enemy_image = {'en_shoot_l': load_image('en_shoot_l.png', -1), 'en_shoot_r': load_image('en_shoot_r.png', -1),
-               'en_die_l': load_image('en_die_l.png', -1), 'en_die_r': load_image('en_die_r.png', -1),
-               'en_stay_r': load_image('en_stay_r.png', -1), 'en_stay_l': load_image('en_stay_l.png', -1)}
+
 tile_width = 30
 tile_height = 30
 player = None
 
-# группы спрайтов
-all_sprites = pygame.sprite.Group()
-tiles_group = pygame.sprite.Group()
-player_group = pygame.sprite.Group()
-bullets = pygame.sprite.Group()
-bullets_en = pygame.sprite.Group()
-lava = pygame.sprite.Group()
-enemy = pygame.sprite.Group()
+# класс главного героя
 
 
 class Player(pygame.sprite.Sprite):
@@ -78,7 +56,7 @@ class Player(pygame.sprite.Sprite):
         self.stay = False
         self.jump = False
         self.die = False
-        self.force = 12
+        self.force = 11
         self.image = self.frames[self.cur_frame]
         self.rect = self.rect.move(tile_width * pos_x + 15, tile_height * pos_y + 5)
         self.rect.x = coords[0]
@@ -88,20 +66,22 @@ class Player(pygame.sprite.Sprite):
         self.rect = pygame.Rect(coords[0], coords[1], sheet.get_width() // columns,
                                 sheet.get_height() // rows)
         for j in range(rows):
-            for i in range(columns):
-                frame_location = (self.rect.w * i, self.rect.h * j)
+            for k in range(columns):
+                frame_location = (self.rect.w * k, self.rect.h * j)
                 self.frames.append(sheet.subsurface(pygame.Rect(
                     frame_location, self.rect.size)))
 
     def update(self, *args):
+        # проверка на прикосновение к шипам, пулям, лаве и противникам
         for j in pygame.sprite.spritecollide(self, tiles_group, False):
-            if j.tile_type == 'sprikes':
+            if j.tile_type == 'sprikes' or j.tile_type == 'sprikes_up':
                 self.die = True
-        if len(pygame.sprite.spritecollide(self, lava, False)) != 0:
-            self.die = True
-        if len(pygame.sprite.spritecollide(self, bullets_en, False)) != 0:
+        if len(pygame.sprite.spritecollide(self, lava, False)) != 0 or \
+                len(pygame.sprite.spritecollide(self, bullets_en, False)) != 0 or \
+                len(pygame.sprite.spritecollide(self, enemy, False)) != 0:
             self.die = True
 
+        # реализация прыжка
         for _ in range(15):
             if len(pygame.sprite.spritecollide(self, tiles_group, False)) == 0:
                 self.stay = False
@@ -111,22 +91,22 @@ class Player(pygame.sprite.Sprite):
                 self.stay = True
                 break
 
-        if i.type == pygame.KEYDOWN and self.die is False and self.stay is True:
-            if i.key == pygame.K_SPACE:
+        if args[2] is True and self.die is False and self.stay is True:
                 self.jump = True
-        if i.type == pygame.KEYDOWN and self.die is False and (pygame.time.get_ticks() // 1000 - self.time) >= 2:
-            if i.key == pygame.K_z:
-                self.shoot = True
-                self.time = pygame.time.get_ticks() // 1000
-                if motion == 'right' or motion == 'stop':
-                    Bullet('gun_r', coords[0] + 5, coords[1] + 5)
-                    self.frames = []
-                    self.cut_sheet(player_image['shoot_r'], 6, 1)
-                elif motion == 'left':
-                    Bullet('gun_l', coords[0] - 5, coords[1] - 5)
-                    self.frames = []
-                    self.cut_sheet(player_image['shoot_l'], 6, 1)
+        # смена анимации при случаи выстрела
+        if args[1] is True and self.die is False and (pygame.time.get_ticks() // 1000 - self.time) >= 1:
+            self.shoot = True
+            self.time = pygame.time.get_ticks() // 1000
+            if motion == 'right' or motion == 'stop':
+                Bullet('gun_r', coords[0] + 5, coords[1] + 5)
+                self.frames = []
+                self.cut_sheet(player_image['shoot_r'], 6, 1)
+            elif motion == 'left':
+                Bullet('gun_l', coords[0] - 5, coords[1] - 5)
+                self.frames = []
+                self.cut_sheet(player_image['shoot_l'], 6, 1)
 
+        # смена анимации при случае смены направления ходьбы
         if args[0] is True and motion == 'left' and self.die is False:
             self.frames = []
             self.cut_sheet(player_image['run_l'], 7, 1)
@@ -136,6 +116,7 @@ class Player(pygame.sprite.Sprite):
         elif args[0] is True and motion == 'stop' and self.die is False:
             self.frames = []
             self.cut_sheet(player_image['stay'], 1, 1)
+        # если во время прыжка игрок напирается на ground
         if self.jump is True and self.die is False:
             if self.force > 0:
                 self.force -= 1
@@ -144,21 +125,21 @@ class Player(pygame.sprite.Sprite):
                     coords[1] -= 1
                     if len(pygame.sprite.spritecollide(self, tiles_group, False)) != 0:
                         for sp in pygame.sprite.spritecollide(self, tiles_group, False):
-                            if sp.tile_type == 'ground':
+                            if sp.tile_type == 'ground' or sp.tile_type == 'ground_l' or sp.tile_type == 'ground_r' or sp.tile_type == 'end':
                                 self.rect.y += 1
                                 coords[1] += 1
                                 self.jump = False
-                                self.force = 12
+                                self.force = 11
                         break
             else:
                 self.jump = False
-                self.force = 12
-
+                self.force = 11
+        # если во время пходьбы игрок напирается на ground
         if motion == 'left' and coords[0] < width:
             coords[0] -= 6
             self.rect.x -= 6
             for j in pygame.sprite.spritecollide(self, tiles_group, False):
-                if j.tile_type == 'ground':
+                if j.tile_type == 'ground' or j.tile_type == 'ground_l' or j.tile_type == 'ground_r' or j.tile_type == 'end':
                     if j.rect.x < coords[0] and j.rect.y - coords[1] < 25:
                         coords[0] += 6
                         self.rect.x += 6
@@ -166,17 +147,22 @@ class Player(pygame.sprite.Sprite):
             coords[0] += 6
             self.rect.x += 6
             for j in pygame.sprite.spritecollide(self, tiles_group, False):
-                if j.tile_type == 'ground':
+                if j.tile_type == 'ground' or j.tile_type == 'ground_l' or j.tile_type == 'ground_r' or j.tile_type == 'end':
                     if j.rect.x > coords[0] and j.rect.y - coords[1] < 25:
                         coords[0] -= 6
                         self.rect.x -= 6
-
+                elif j.tile_type == 'door' and key is True:
+                    pygame.quit()
+                    menu_middle.start()
+                elif j.tile_type == 'door' and key is False:
+                    coords[0] -= 6
+                    self.rect.x -= 6
         self.cur_frame = (self.cur_frame + 1) % len(self.frames)
         self.image = self.frames[self.cur_frame]
-
+        # подсчет количества пуль на карте
         if self.shoot is True:
             self.h += 1
-
+        # сменя анимации на ходьбу после окончания выстрела
         if self.h == 6:
             self.h = 0
             self.shoot = False
@@ -189,7 +175,7 @@ class Player(pygame.sprite.Sprite):
             elif motion == 'stop':
                 self.frames = []
                 self.cut_sheet(player_image['stay'], 1, 1)
-
+        # анимация смерти героя
         if self.die is True:
             self.k += 1
             self.frames = []
@@ -197,7 +183,10 @@ class Player(pygame.sprite.Sprite):
         if self.k > 0:
             self.k += 1
         if self.k == 6:
-            exit()
+            pygame.quit()
+            menu_start.start()
+
+# класс где находятся все tiles
 
 
 class Tile(pygame.sprite.Sprite):
@@ -207,9 +196,11 @@ class Tile(pygame.sprite.Sprite):
         self.tile_type = tile_type
         self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
 
+# отдельный класс для лавы
+
 
 class Lava(pygame.sprite.Sprite):
-    def __init__(self, tile_type, pos_x, pos_y):
+    def __init__(self, tile_type,  pos_x, pos_y):
         super().__init__(lava)
         self.frames = []
         self.coords = [tile_width * pos_x, tile_height * pos_y]
@@ -231,6 +222,8 @@ class Lava(pygame.sprite.Sprite):
         self.cur_frame = (self.cur_frame + 1) % len(self.frames)
         self.image = self.frames[self.cur_frame]
 
+# отдельный класс пуль
+
 
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
@@ -240,13 +233,20 @@ class Bullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect().move(pos_x, pos_y)
 
     def update(self):
+        # пуля умирает, если соприкасается с землей
+        if len(pygame.sprite.spritecollide(self, tiles_group, False)) != 0:
+            for i in pygame.sprite.spritecollide(self, tiles_group, False):
+                if i.tile_type == 'ground' or i.tile_type == 'ground_l' or i.tile_type == 'ground_r' or i.tile_type == 'end':
+                    self.kill()
         if self.tile_type == 'gun_r':
             self.rect.x += 20
         elif self.tile_type == 'gun_l':
             self.rect.x -= 20
-
+        # пуля умирает, если уходит на края экрана
         if self.rect.x >= width:
             self.kill()
+
+# отдельный класс для пуль противника
 
 
 class Bullet_en(pygame.sprite.Sprite):
@@ -257,10 +257,32 @@ class Bullet_en(pygame.sprite.Sprite):
         self.rect = self.image.get_rect().move(pos_x, pos_y)
 
     def update(self):
+        if len(pygame.sprite.spritecollide(self, tiles_group, False)) != 0:
+            for i in pygame.sprite.spritecollide(self, tiles_group, False):
+                if i.tile_type == 'ground' or i.tile_type == 'ground_l' or i.tile_type == 'ground_r' or i.tile_type == 'end':
+                    self.kill()
         if self.tile_type == 'en_gun_r':
-            self.rect.x += 20
+            self.rect.x += 15
         elif self.tile_type == 'en_gun_l':
-            self.rect.x -= 20
+            self.rect.x -= 15
+
+# отдельный класс для ключа
+
+
+class Key(pygame.sprite.Sprite):
+    def __init__(self, tile_type, pos_x, pos_y):
+        super().__init__(tiles_group, key_group, all_sprites)
+        self.image = tile_images[tile_type]
+        self.tile_type = tile_type
+        self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
+
+    def update(self):
+        global key
+        if len(pygame.sprite.spritecollide(self, player_group, False)) != 0:
+            self.kill()
+            key = True
+
+# класс противников
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -302,8 +324,6 @@ class Enemy(pygame.sprite.Sprite):
             bullets.empty()
         self.rect.x -= 3
         self.coords[0] -= 3
-        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
-        self.image = self.frames[self.cur_frame]
         if self.shoot is True:
             self.h += 1
         if self.h == 5:
@@ -316,7 +336,7 @@ class Enemy(pygame.sprite.Sprite):
                 self.frames = []
                 self.cut_sheet(enemy_image['en_stay_r'], 1, 1)
 
-        if (pygame.time.get_ticks() // 1000 - self.time) >= 5:
+        if (pygame.time.get_ticks() // 1000 - self.time) >= 1:
             self.time = pygame.time.get_ticks() // 1000
             if self.motion == 'left':
                 self.motion = 'right'
@@ -354,6 +374,11 @@ class Enemy(pygame.sprite.Sprite):
         if self.k == 6:
             self.kill()
 
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
+
+# генерирование уровней
+
 
 def generate_level(level):
     global coords
@@ -370,58 +395,136 @@ def generate_level(level):
                 Lava('lava', x, y)
             elif level[y][x] == '&':
                 Enemy(x, y)
+            elif level[y][x] == '<':
+                Tile('ground_l', x, y)
+            elif level[y][x] == '>':
+                Tile('ground_r', x, y)
+            elif level[y][x] == '^':
+                Tile('end', x, y)
             elif level[y][x] == '!':
-                Tile('key', x, y)
+                Key('key', x, y)
+            elif level[y][x] == '1':
+                Tile('start', x, y)
             elif level[y][x] == '?':
                 Tile('door', x, y)
             elif level[y][x] == '$':
-                coords = [x * 30, 390]
-                new_player = Player(x, y)
+                coords = [(x + 2) * 30, 300]
+                new_player = Player(x + 2, y)
     # вернем игрока, а также размер поля в клетках
     return new_player, x, y
 
+# функция, в которой находится главный цикл. функция нужна для взаимодействия с меню
 
-running = True
-player, level_x, level_y = generate_level(load_level('level_1.txt'))
-fon = pygame.transform.scale(load_image('fon.png'), (width, height))
-screen.blit(fon, (0, 0))
-while running:
-    up = False
-    for i in pygame.event.get():
-        if i.type == pygame.QUIT:
-            running = False
-        elif i.type == pygame.KEYDOWN:
-            if i.key == pygame.K_LEFT:
-                motion = 'left'
-                player_group.update(True)
-                up = True
-            elif i.key == pygame.K_RIGHT:
-                motion = 'right'
-                player_group.update(True)
-                up = True
-        elif i.type == pygame.KEYUP:
-            if i.key in [pygame.K_LEFT, pygame.K_RIGHT]:
-                motion = 'stop'
-                player_group.update(True)
-                up = True
-    if up is False:
-        player_group.update(False)
-    for sprite in all_sprites:
-        if sprite.tile_type != 'lava':
-            sprite.rect.x -= 3
-    for sprite in player_group:
-        sprite.rect.x -= 3
-        coords[0] -= 3
-    bullets_en.update()
-    bullets.update()
-    enemy.update()
-    lava.update()
+
+def main(level):
+    global tile_images
+    global player_image
+    global enemy_image
+    global motion
+    global all_sprites
+    global tiles_group
+    global player_group
+    global bullets
+    global bullets_en
+    global lava
+    global enemy
+    global coords
+    global en_motion
+    global key
+    global key_group
+    key = False
+    coords = [350, 300]
+    motion = 'stop'
+    en_motion = 'left'
+    screen = pygame.display.set_mode((width, height))
+    screen_rect = (0, 0, width, height)
+    pygame.mixer.pre_init(44100, 16, 2, 4096)
+    pygame.init()
+    pygame.mixer.init()
+    clock = pygame.time.Clock()
+    tile_images = {'ground': load_image('ground.png', -1),
+                   'ground_r': load_image('ground_r.png', -1),
+                   'ground_l': load_image('ground_l.png', -1),
+                   'sprikes': load_image('sprikes.png', -1),
+                   'end': load_image('end.png', -1),
+                   'key': load_image('key.png', -1),
+                   'gun_l': load_image('gun_l.png', -1),
+                   'gun_r': load_image('gun_r.png', -1),
+                   'lava': load_image('lava.png', -1),
+                   'en_gun_l': load_image('en_gun_l.png', -1),
+                   'en_gun_r': load_image('en_gun_r.png', -1),
+                   'door': load_image('door.png', -1),
+                   'start': load_image('start.png', -1),
+                   }
+    player_image = {'run_r': load_image('run_r.png', -1), 'run_l': load_image('run_l.png', -1),
+                    'shoot_l': load_image('shoot_l.png', -1), 'shoot_r': load_image('shoot_r.png', -1),
+                    'die': load_image('die.png', -1), 'stay': load_image('stay.png', -1)}
+    enemy_image = {'en_shoot_l': load_image('en_shoot_l.png', -1), 'en_shoot_r': load_image('en_shoot_r.png', -1),
+                   'en_die_l': load_image('en_die_l.png', -1), 'en_die_r': load_image('en_die_r.png', -1),
+                   'en_stay_r': load_image('en_stay_r.png', -1), 'en_stay_l': load_image('en_stay_l.png', -1)}
+
+    all_sprites = pygame.sprite.Group()
+    tiles_group = pygame.sprite.Group()
+    player_group = pygame.sprite.Group()
+    bullets = pygame.sprite.Group()
+    bullets_en = pygame.sprite.Group()
+    lava = pygame.sprite.Group()
+    key_group = pygame.sprite.Group()
+    enemy = pygame.sprite.Group()
+
+    running = True
+    player, level_x, level_y = generate_level(load_level('level_{}.txt'.format(str(level))))
+    fon = pygame.transform.scale(load_image('fon.png'), (width, height))
     screen.blit(fon, (0, 0))
-    all_sprites.draw(screen)
-    enemy.draw(screen)
-    bullets.draw(screen)
-    bullets_en.draw(screen)
-    lava.draw(screen)
-    player_group.draw(screen)
-    clock.tick(fps)
-    pygame.display.flip()
+    pygame.mixer.music.load('Sound_fon.mp3')
+    pygame.mixer.music.play()
+    pygame.mixer.music.set_volume(0.1)
+    while running:
+        up = False
+        # в player_group.update() передаются три булевых знания, обозночающие смену направления, стрельбу и прыжок
+        for i in pygame.event.get():
+            if i.type == pygame.QUIT:
+                running = False
+            elif i.type == pygame.KEYDOWN:
+                if i.key == pygame.K_LEFT:
+                    motion = 'left'
+                    player_group.update(True, False, False)
+                    up = True
+                elif i.key == pygame.K_RIGHT:
+                    motion = 'right'
+                    player_group.update(True, False, False)
+                    up = True
+                elif i.key == pygame.K_z:
+                    player_group.update(False, True, False)
+                    up = True
+                elif i.key == pygame.K_SPACE:
+                    player_group.update(False, False, True)
+                    up = True
+            elif i.type == pygame.KEYUP:
+                if i.key in [pygame.K_LEFT, pygame.K_RIGHT]:
+                    motion = 'stop'
+                    player_group.update(True, False, False)
+                    up = True
+        if up is False:
+            player_group.update(False, False, False)
+        for sprite in all_sprites:
+            if sprite.tile_type != 'lava':
+                sprite.rect.x -= 3
+        for sprite in player_group:
+            sprite.rect.x -= 3
+            coords[0] -= 3
+        bullets_en.update()
+        bullets.update()
+        enemy.update()
+        lava.update()
+        key_group.update()
+        screen.blit(fon, (0, 0))
+        all_sprites.draw(screen)
+        enemy.draw(screen)
+        bullets.draw(screen)
+        key_group.draw(screen)
+        bullets_en.draw(screen)
+        lava.draw(screen)
+        player_group.draw(screen)
+        clock.tick(fps)
+        pygame.display.flip()
