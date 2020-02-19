@@ -200,6 +200,11 @@ class Player(pygame.sprite.Sprite):
         if self.k > 0:
             self.k += 1
         if self.k == 6:
+            pygame.mixer.music.pause()
+            pygame.mixer.music.load('die.mp3')
+            pygame.mixer.music.play()
+            pygame.mixer.music.set_volume(0.5)
+            pygame.time.delay(5000)
             pygame.quit()
             menu_start.start()
 
