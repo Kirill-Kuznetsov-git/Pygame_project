@@ -30,6 +30,8 @@ def load_level(filename):
     return list(map(lambda x: x.ljust(max_width, '.'), level_map))
 
 # переменные которые не изменяются
+
+
 width = 700
 height = 610
 fps = 20
@@ -57,6 +59,7 @@ class Player(pygame.sprite.Sprite):
         self.jump = False
         self.die = False
         self.force = 11
+        self.time_pain = 0
         self.image = self.frames[self.cur_frame]
         self.rect = self.rect.move(tile_width * pos_x + 15, tile_height * pos_y + 5)
         self.rect.x = coords[0]
@@ -72,13 +75,27 @@ class Player(pygame.sprite.Sprite):
                     frame_location, self.rect.size)))
 
     def update(self, *args):
+        global life
+        global pain
         # проверка на прикосновение к шипам, пулям, лаве и противникам
         for j in pygame.sprite.spritecollide(self, tiles_group, False):
             if j.tile_type == 'sprikes' or j.tile_type == 'sprikes_up':
+                if (pygame.time.get_ticks() // 1000 - self.time_pain) >= 2 and immortality is False:
+                    if life - 1 > 0:
+                        self.time_pain = pygame.time.get_ticks() // 1000
+                        life -= 1
+                        pain = True
+                    else:
+                        self.die = True
+        if (len(pygame.sprite.spritecollide(self, bullets_en, False)) != 0 or
+             len(pygame.sprite.spritecollide(self, enemy, False)) != 0) and (pygame.time.get_ticks() // 1000 - self.time_pain) >= 2 and immortality is False:
+            if life - 1 > 0:
+                self.time_pain = pygame.time.get_ticks() // 1000
+                life -= 1
+                pain = True
+            else:
                 self.die = True
-        if len(pygame.sprite.spritecollide(self, lava, False)) != 0 or \
-                len(pygame.sprite.spritecollide(self, bullets_en, False)) != 0 or \
-                len(pygame.sprite.spritecollide(self, enemy, False)) != 0:
+        if len(pygame.sprite.spritecollide(self, lava, False)) != 0:
             self.die = True
 
         # реализация прыжка
@@ -266,6 +283,49 @@ class Bullet_en(pygame.sprite.Sprite):
         elif self.tile_type == 'en_gun_l':
             self.rect.x -= 15
 
+# класс для жизней
+
+
+class Live(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(hearts)
+        self.image = tile_images['heart']
+        self.tile_type = 'heart'
+        self.rect = self.image.get_rect().move(pos_x, pos_y)
+
+# класс для обозначения бессмертия
+
+
+class Potion_mark(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(potion_mark)
+        self.image = tile_images['potion']
+        self.tile_type = 'potion'
+        self.rect = self.image.get_rect().move(pos_x, pos_y)
+
+# класс  зельев
+
+
+class Potion(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(all_sprites, potion)
+        self.image = tile_images['potion']
+        self.tile_type = 'potion'
+        self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
+
+    def update(self):
+        global immortality
+        global time_imorlat
+        print(pygame.time.get_ticks() // 1000 - time_imorlat >= 5 and immortality is True)
+        if len(pygame.sprite.spritecollide(self, player_group, False)) != 0:
+            immortality = True
+            Potion_mark(500, 50)
+            self.kill()
+            time_imorlat = pygame.time.get_ticks() // 1000
+        if pygame.time.get_ticks() // 1000 - time_imorlat >= 5 and immortality is True:
+            potion_mark.empty()
+            immortality = False
+
 # отдельный класс для ключа
 
 
@@ -399,6 +459,8 @@ def generate_level(level):
                 Tile('ground_l', x, y)
             elif level[y][x] == '>':
                 Tile('ground_r', x, y)
+            elif level[y][x] == '-':
+                Potion(x, y)
             elif level[y][x] == '^':
                 Tile('end', x, y)
             elif level[y][x] == '!':
@@ -431,8 +493,19 @@ def main(level):
     global coords
     global en_motion
     global key
+    global life
+    global pain
+    global hearts
+    global potion_mark
     global key_group
+    global potion
+    global immortality
+    global time_imorlat
     key = False
+    immortality = False
+    life = 3
+    time_imorlat = 0
+    pain = False
     coords = [350, 300]
     motion = 'stop'
     en_motion = 'left'
@@ -455,6 +528,8 @@ def main(level):
                    'en_gun_r': load_image('en_gun_r.png', -1),
                    'door': load_image('door.png', -1),
                    'start': load_image('start.png', -1),
+                   'heart': load_image('heart.png', -1),
+                   'potion': load_image('potion.png', -1)
                    }
     player_image = {'run_r': load_image('run_r.png', -1), 'run_l': load_image('run_l.png', -1),
                     'shoot_l': load_image('shoot_l.png', -1), 'shoot_r': load_image('shoot_r.png', -1),
@@ -471,7 +546,12 @@ def main(level):
     lava = pygame.sprite.Group()
     key_group = pygame.sprite.Group()
     enemy = pygame.sprite.Group()
-
+    hearts = pygame.sprite.Group()
+    potion = pygame.sprite.Group()
+    potion_mark = pygame.sprite.Group()
+    Live(500, 10)
+    Live(550, 10)
+    Live(600, 10)
     running = True
     player, level_x, level_y = generate_level(load_level('level_{}.txt'.format(str(level))))
     fon = pygame.transform.scale(load_image('fon.png'), (width, height))
@@ -513,15 +593,23 @@ def main(level):
         for sprite in player_group:
             sprite.rect.x -= 3
             coords[0] -= 3
+        if pain is True:
+            hearts.empty()
+            for i in range(life):
+                Live(500 + 50 * i, 10)
+        pain = False
         bullets_en.update()
         bullets.update()
         enemy.update()
         lava.update()
+        potion.update()
         key_group.update()
         screen.blit(fon, (0, 0))
         all_sprites.draw(screen)
         enemy.draw(screen)
+        potion_mark.draw(screen)
         bullets.draw(screen)
+        hearts.draw(screen)
         key_group.draw(screen)
         bullets_en.draw(screen)
         lava.draw(screen)

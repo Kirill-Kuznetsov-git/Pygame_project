@@ -31,7 +31,7 @@ class Example(QWidget):
 
         self.control = QLabel(self)
         self.control.move(150, 30)
-        self.control.setText('Управление:\nZ-выстрел\nSpace-Прыжок\nСтрелки влево и вправо- ходить влево и вправо')
+        self.control.setText('Управление:\nZ-выстрел\nSpace-Прыжок\nСтрелки влево и вправо- ходить влево и вправо\nВсего три жизни\nЗелье - бессмертие')
 
     def st0(self):
         global level
