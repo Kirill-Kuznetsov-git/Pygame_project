@@ -321,7 +321,6 @@ class Potion(pygame.sprite.Sprite):
     def update(self):
         global immortality
         global time_imorlat
-        print(pygame.time.get_ticks() // 1000 - time_imorlat >= 5 and immortality is True)
         if len(pygame.sprite.spritecollide(self, player_group, False)) != 0:
             immortality = True
             Potion_mark(500, 50)
